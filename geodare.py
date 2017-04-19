@@ -37,10 +37,9 @@ logging.basicConfig(format='%(asctime)s %(message)s', datefmt='%m/%d/%Y %I:%M:%S
 np.random.seed(77)
 random.seed(77)
 
-#X_train, Y_train, U_train, X_dev, Y_dev, U_dev, X_test, Y_test, U_test, categories, userLocation, classLatMedian, classLonMedian, vectorizer
     
 
-
+#lasagne sparse layer for BoW text input
 class SparseInputDenseLayer(DenseLayer):
     def get_output_for(self, input, **kwargs):
         if not isinstance(input, (S.SparseVariable, S.SparseConstant,
@@ -51,6 +50,7 @@ class SparseInputDenseLayer(DenseLayer):
         if self.b is not None:
             activation = activation + self.b.dimshuffle('x', 0)
         return self.nonlinearity(activation)
+#lasagne sparse dropout layer for BoW text input
 class SparseInputDropoutLayer(DropoutLayer):
     def get_output_for(self, input, deterministic=False, **kwargs):
         if not isinstance(input, (S.SparseVariable, S.SparseConstant,
@@ -99,38 +99,6 @@ def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
 
 
 
-
-def get_dare_vocab(data_dir, vectorizer):
-    texts = []
-    vocabs = vectorizer.get_feature_names()
-    wordfreqs = read_1m_words()
-    topwords = [wordfreq[0] for wordfreq in wordfreqs]
-    freqwords = set(topwords[0:10000])
-    vocabs = [v for v in vocabs if v not in freqwords and v[0]!='#']   
-    logging.info('#vocab %d' %len(vocabs)) 
-    return sorted(vocabs)
-    texts = texts + vocabs
-    #now read dare json files
-    json_file = path.join(data_dir, 'geodare.cleansed.filtered.json')
-    json_objs = []
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            dialect = obj['dialect'].lower()
-            subregions = obj['dialect subregions']
-            word = obj['word'].lower()
-            texts.append(word)
-            if subregions:
-                texts.append(subregions.lower())
-                subregion_items = subregions.lower().split(',')
-                subregion_items = [item.strip() for item in subregion_items]
-                texts.extend(subregion_items)
-            else:
-                texts.append(dialect)
-    texts = sorted(list(set([text.strip() for text in texts if len(text)>1])))
-    return texts
-
 def get_dare_vocab_vectorize(data_dir, vectorizer):
     texts = []
     vocabs = vectorizer.get_feature_names()
@@ -153,34 +121,11 @@ def get_dare_vocab_vectorize(data_dir, vectorizer):
                 texts.append(word)
             if subregions:
                 texts.append(dialect + ' ' + subregions.lower())
-                #subregion_items = subregions.lower().split(',')
-                #subregion_items = [item.strip() for item in subregion_items]
-                #texts.extend(subregion_items)
             else:
                 texts.append(dialect)
     texts = sorted(list(set([text.strip() for text in texts if len(text)>1])))
     return texts
-def get_dare_vocab_closed(data_dir, vectorizer):
-    texts = []
-    vocabs = vectorizer.get_feature_names()
-    vocabset = set(vocabs)
-    wordfreqs = read_1m_words()
-    topwords = [wordfreq[0] for wordfreq in wordfreqs]
-    freqwords = set(topwords[0:10000])
-    #now read dare json files
-    json_file = path.join(data_dir, 'geodare.cleansed.filtered.json')
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            dialect = obj['dialect'].lower()
-            subregions = obj['dialect subregions']
-            word = obj['word'].lower()
-            if word in vocabset:
-                texts.append(word)
-    texts = sorted(list(set([text.strip() for text in texts if len(text)>1])))
-    logging.info('#vocab %d' %len(texts))
-    return texts
+
 
 def read_1m_words(input_file='./data/count_1w.txt'):
     wordcount = []
@@ -255,59 +200,7 @@ def nearest_neighbours(vocab, embs, k, model):
         word_neighbours[word].append(nbr)
     
     return word_neighbours
-def nearest_neighbours_closed(vocab, embs, k, model):
-    #now read dare json files
-    json_file = './data/geodare.cleansed.filtered.json'
-    json_objs = []
-    texts = []
-    vocabset = set(vocab)
-    dialect_words = defaultdict(list)
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            json_objs.append(obj)         
-            dialect = obj['dialect'].lower()
-            subregions = obj['dialect subregions']
-            word = obj['word'].lower()
-            texts.append(word)
-            if word in vocabset:
-                dialect_words[dialect].append(word.strip().lower())
 
-    
-    logging.info('creating dialect embeddings by multiplying subregion embdeddings')
-    dialect_embs = OrderedDict()
-    for dialect, words in dialect_words.iteritems():
-        random_word = random.choice(words)
-        i = 0
-        while random_word not in vocabset and i < 10:
-            random_word = random.choice(words)
-            i += 1
-        if random_word not in vocabset:
-            _index = random.choice(range(embs.shape[0]))
-            logging.warn('%d tries, word %s not found in word2vec vocab, choosing a random word...' %(i, random_word))
-        else:
-            _index = vocab.index(random_word)
-        dialect_embs[dialect] = embs[_index, :].reshape((1, embs.shape[1]))
-    target_X = np.vstack(tuple(dialect_embs.values()))
-
-    #logging.info('MinMax Scaling each dimension to fit between 0,1')
-    #target_X = scaler.fit_transform(target_X)
-    #logging.info('l1 normalizing embedding samples')
-    #target_X = normalize(target_X, norm='l1', axis=1, copy=False)
-
-    #target_indices = np.asarray(text_index.values())
-    #target_X = embs[target_indices, :]
-    logging.info('computing nearest neighbours of dialects')
-    nbrs = NearestNeighbors(n_neighbors=len(vocabset), algorithm='brute', leaf_size=1, metric='cosine', n_jobs=20).fit(embs)
-    distances, indices = nbrs.kneighbors(target_X)
-    word_nbrs = [(dialect_embs.keys()[i], vocab[indices[i, j]]) for i in range(target_X.shape[0]) for j in range(k)]
-    word_neighbours = defaultdict(list)
-    for word_nbr in word_nbrs:
-        word, nbr = word_nbr
-        word_neighbours[word].append(nbr)
-    
-    return word_neighbours
 
 def pca_dare_vocab(vocab, embs):
     #now read dare json files
@@ -349,10 +242,6 @@ def pca_dare_vocab(vocab, embs):
     southeast_words = dialect_words[two_dialects[1]]
     southeast_indices = [words.index(w) for w in southeast_words if w in all_words]
     f, ax = plt.subplots()
-    #plt.ylim((0, 0.2))
-    #plt.xlim((0, 0.2))
-    #ax.set_aspect('equal')
-    #plt.tight_layout()
     plt.axis('off')
     for i in pacific_northwest_indices:
         txt = words[i]
@@ -362,71 +251,7 @@ def pca_dare_vocab(vocab, embs):
         plt.annotate(txt, (dare_embs[i, 0],dare_embs[i, 1]), fontsize=10, color='crimson')
     plt.savefig('wordmap.pdf')
     
-def nearest_neighbours_of_dare_random_vocab(vocab, embs, k, model):
-    #now read dare json files
-    vocabset = set(vocab)
-    json_file = './data/geodare.cleansed.filtered.json'
-    json_objs = []
-    texts = []
-    dialect_words = defaultdict(list)
-    dialect_subregions = {}
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            json_objs.append(obj)         
-            dialect = obj['dialect'].lower()
-            subregions = obj['dialect subregions']
-            word = obj['word'].lower()
-            texts.append(word)
-            if word in vocabset:
-                dialect_words[dialect].append(word)
-            if subregions:
-                texts.append(subregions.lower())
-                subregion_items = [item for item in subregions.lower().split(',') if len(item.strip()) > 0]
-                dialect_subregions[dialect] = subregion_items
-                texts.extend(subregion_items)
-            else:
-                texts.append(dialect)
 
-    
-    logging.info('creating dialect embeddings by multiplying subregion embdeddings')
-    dialect_embs = OrderedDict()
-    
-    for dialect, words in dialect_words.iteritems():
-        if len(words) < 2:
-            logging.info('less than 2 words for dialect %s' %dialect)
-            continue
-        random_word = random.choice(words)
-        i = 0
-        while random_word not in vocabset and i < 10:
-            random_word = random.choice(words)
-            i += 1
-        if random_word not in vocabset:
-            _index = random.choice(range(embs.shape[0]))
-            logging.warn('%d tries, word %s not found in word2vec vocab, choosing a random word...' %(i, random_word))
-        else:
-            _index = vocab.index(random_word)
-        dialect_embs[dialect] = embs[_index, :].reshape((1, embs.shape[1]))
-
-    target_X = np.vstack(tuple(dialect_embs.values()))
-    #logging.info('MinMax Scaling each dimension to fit between 0,1')
-    #target_X = scaler.fit_transform(target_X)
-    #logging.info('l1 normalizing embedding samples')
-    #target_X = normalize(target_X, norm='l1', axis=1, copy=False)
-
-    #target_indices = np.asarray(text_index.values())
-    #target_X = embs[target_indices, :]
-    logging.info('computing nearest neighbours of %d dialects' %target_X.shape[0])
-    nbrs = NearestNeighbors(n_neighbors=k, algorithm='auto', leaf_size=10, n_jobs=20).fit(embs)
-    distances, indices = nbrs.kneighbors(target_X)
-    dialect_keys = dialect_embs.keys()
-    _d_nbrs = [(dialect_keys[i], vocab[indices[i, j]]) for i in range(len(dialect_embs)) for j in range(k)]
-    dialect_neighbours = defaultdict(list)
-    for word_nbr in _d_nbrs:
-        word, nbr = word_nbr
-        dialect_neighbours[word].append(nbr)
-    return dialect_neighbours
 
 def nearest_neighbours_vectorize(vocab, embs, k, model):
     #now read dare json files
@@ -466,83 +291,7 @@ def nearest_neighbours_vectorize(vocab, embs, k, model):
         word_neighbours[word].append(nbr)
     
     return word_neighbours
-def nearest_neighbours_ranking_average(vocab, embs, k, model):
-    #now read dare json files
-    json_file = './data/geodare.cleansed.filtered.json'
-    json_objs = []
-    texts = []
-    dialect_words = defaultdict(list)
-    dialect_subregions = {}
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            json_objs.append(obj)         
-            dialect = obj['dialect'].lower()
-            subregions = obj['dialect subregions']
-            word = obj['word'].lower()
-            texts.append(word)
-            dialect_words[dialect].append(word)
-            if subregions:
-                texts.append(subregions.lower())
-                subregion_items = [item for item in subregions.lower().split(',') if len(item.strip()) > 0]
-                dialect_subregions[dialect] = subregion_items
-                texts.extend(subregion_items)
-            else:
-                texts.append(dialect)
 
-    
-    logging.info('creating dialect embeddings by multiplying subregion embdeddings')
-    vocab_embs = OrderedDict()
-    vocabset = set(vocab)
-    for dialect in sorted(dialect_words):
-        dialect_items = dialect_subregions.get(dialect, [dialect])
-        extended_dialect_items = []
-        for dialect_item in dialect_items:
-            itemsplit = dialect_item.split()
-            extended_dialect_items.extend(itemsplit)
-        itemsplit = dialect.split()
-        extended_dialect_items.extend(itemsplit)
-        dialect_item_indices = [vocab.index(item) for item in extended_dialect_items if item in vocabset]
-        for _index in dialect_item_indices:
-            vocab_embs[vocab[_index]] = embs[_index, :].reshape((1, embs.shape[1]))
-
-
-    target_X = np.vstack(tuple(vocab_embs.values()))
-    #logging.info('MinMax Scaling each dimension to fit between 0,1')
-    #target_X = scaler.fit_transform(target_X)
-    #logging.info('l1 normalizing embedding samples')
-    #target_X = normalize(target_X, norm='l1', axis=1, copy=False)
-
-    #target_indices = np.asarray(text_index.values())
-    #target_X = embs[target_indices, :]
-    logging.info('computing nearest neighbours of dialects')
-    nbrs = NearestNeighbors(n_neighbors=k, algorithm='auto', leaf_size=10).fit(embs)
-    distances, indices = nbrs.kneighbors(target_X)
-    vocab_keys = vocab_embs.keys()
-    word_nbrs = [(vocab_keys[i], vocab[indices[i, j]]) for i in range(target_X.shape[0]) for j in range(k)]
-    word_neighbours = defaultdict(list)
-    for word_nbr in word_nbrs:
-        word, nbr = word_nbr
-        word_neighbours[word].append(nbr)
-    
-    dialect_neighbours = defaultdict(list)
-    for dialect in sorted(dialect_words):
-        dialect_items = dialect_subregions.get(dialect, [dialect])
-        extended_dialect_items = []
-        for dialect_item in dialect_items:
-            itemsplit = dialect_item.split()
-            extended_dialect_items.extend(itemsplit)
-        itemsplit = dialect.split()
-        extended_dialect_items.extend(itemsplit)
-        dialect_item_indices = [vocab.index(item) for item in extended_dialect_items if item in vocabset]
-        nbrs = Counter()
-        for _index in dialect_item_indices:
-            for i, nbr in enumerate(word_neighbours[vocab[_index]]):
-                nbrs[nbr] += k - i
-        
-        dialect_neighbours[dialect] = [w[0] for w in nbrs.most_common(k)]
-    return dialect_neighbours
 
 def calc_recall(vocab, word_nbrs, k, freqwords=set(), model='mlp'):
     json_file = './data/geodare.cleansed.filtered.json'
@@ -603,124 +352,12 @@ def calc_recall(vocab, word_nbrs, k, freqwords=set(), model='mlp'):
     sum_support = sum([inf[1] for inf in info])
     logging.info('micro recall :' + str(float(total_true_positive) * 100 / 1472))
 
-def calc_recall_closed(vocab, word_nbrs, freqwords=set(), model='mlp'):
-    json_file = './data/geodare.cleansed.filtered.json'
-    json_objs = []
-    vocabset = set(vocab)
-    dialect_words = defaultdict(list)
-    gold_city_words = defaultdict(set)
-    retrieved_city_words = defaultdict(list)
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            json_objs.append(obj)         
-            dialect = obj['dialect'].lower()
-            cities = obj['dialect subregions']
-            word = obj['word'].lower()
-            
-            if word in vocabset:
-                if cities:
-                    cities = [c.lower().strip() for c in cities.split(',')]
-                    for city in cities:
-                        gold_city_words[city].add(word)
-                else:
-                    gold_city_words[dialect].add(word)
-    for city in gold_city_words:
-        retrieved_words = word_nbrs[city]
-        for w in retrieved_words:
-            retrieved_city_words[city].append(w)
-
-    
-    total_precisions = []
-    for city , nbrs in retrieved_city_words.iteritems():
-        #the first item is the query itself
-        gold_words = gold_city_words[city] - set(nbrs[0])
-        nbrs = nbrs[1:]
-        sum_p = 0
-        hits_at_k = 0.
-        for k in range(len(nbrs)):
-            k_word = nbrs[k]
-            if k_word in gold_words:
-                #we have a relevant word here
-                hits_at_k += 1
-                precision_at_k = hits_at_k / (k + 1)
-                sum_p += precision_at_k
-        avg_p = sum_p / max(len(gold_words) - 1, 1)
-        total_precisions.append(avg_p)
-    logging.info('mean average precision is %f' %np.mean(total_precisions))  
-
-def calc_recall_closed2(vocab, word_nbrs, freqwords=set(), model='mlp'):
-    json_file = './data/geodare.cleansed.filtered.json'
-    json_objs = []
-    vocabset = set(vocab)
-    gold_dialect_words = defaultdict(set)
-    retrieved_dialect_words = word_nbrs
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            json_objs.append(obj)         
-            dialect = obj['dialect'].lower()
-            cities = obj['dialect subregions']
-            word = obj['word'].lower()
-            if word in vocabset:
-                gold_dialect_words[dialect].add(word)
 
 
-        
-    total_precisions = []
-    for dialect , nbrs in retrieved_dialect_words.iteritems():
-        #the first item is the query itself
-        gold_words = gold_dialect_words[dialect] - set(nbrs[0])
-        nbrs = nbrs[1:]
-        sum_p = 0
-        hits_at_k = 0.
-        for k in range(len(nbrs)):
-            k_word = nbrs[k]
-            if k_word in gold_words:
-                #we have a relevant word here
-                hits_at_k += 1
-                precision_at_k = hits_at_k / (k + 1)
-                sum_p += precision_at_k
-        avg_p = sum_p / max(len(gold_words) - 1, 1)
-        total_precisions.append(avg_p)
-    logging.info('mean average precision is %f' %np.mean(total_precisions))             
+           
    
 
-def calc_recall_set(word_nbrs, k, freqwords=set()):
-    json_file = './data/geodare.cleansed.filtered.json'
-    json_objs = []
-    texts = []
-    dialect_words = defaultdict(list)
-    with codecs.open(json_file, 'r', encoding='utf-8') as fin:
-        for line in fin:
-            line = line.strip()
-            obj = json.loads(line, encoding='utf-8')
-            json_objs.append(obj)         
-            dialect = obj['dialect'].lower()
-            subregions = obj['dialect subregions']
-            word = obj['word'].lower()
-            '''
-            if subregions:
-                dialect_words[dialect + ' ' + subregions.lower()].append(word)
-            else:
-                dialect_words[dialect].append(word)
-            '''
-            dialect_words[dialect].append(word)
 
-    dwords_set = set()
-    dwords_retrieved_set = set()
-    for dialect, nbrs in word_nbrs.iteritems():
-        nbrs = [nbr for nbr in nbrs if nbr not in freqwords and nbr[0]!='#']
-        nbrs = set(nbrs[0:k])
-        dwords_retrieved_set = dwords_retrieved_set | nbrs
-        dwords_set = dwords_set | set(dialect_words[dialect])
-    total_true_positive = len(dwords_retrieved_set & dwords_set)
-    total_positive = len(dwords_set)
-    logging.info('recall at ' + str(k))
-    logging.info('#relevant %d, #hits %d' % (total_positive, total_true_positive))
-    logging.info('micro recall :' + str(float(total_true_positive) * 100 / total_positive))
 
 def geo_eval(y_true, y_pred, U_eval, classLatMedian, classLonMedian, userLocation):
     assert len(y_pred) == len(U_eval), "#preds: %d, #users: %d" %(len(y_pred), len(U_eval))
@@ -848,14 +485,14 @@ def geo_mlp(data_dir, dataset, n_epochs=10, batch_size=1000, regul_coefs=[5e-5, 
         return
 
     logging.info('reading DARE vocab...')
-    dare_vocab = get_dare_vocab_closed(data_dir, vectorizer)
+    dare_vocab = get_dare_vocab_vectorize(data_dir, vectorizer)
     X_dare = vectorizer.transform(dare_vocab)
     X_dare = X_dare.astype('float32')
     logging.info('getting DARE embeddings...')
     X_dare_embs = f_get_embeddings(X_dare)
     logging.info('drawing wordmap...')
     #pca_dare_vocab(dare_vocab, X_dare_embs)
-    dialect_eval_closed(data_dir, vocab=dare_vocab, embs=X_dare_embs, model='mlp') 
+    dialect_eval(data_dir, vocab=dare_vocab, embs=X_dare_embs, model='mlp') 
 
 def load_word2vec(fname):
     import gensim
@@ -886,22 +523,7 @@ def dialect_eval(data_dir, vocab, embs, model):
     for r_at_k in percents:
         calc_recall(vocab, word_nbrs=word_nbrs, k=r_at_k, freqwords=freqwords, model=model)
 
-def dialect_eval_closed(vocab, embs, model):
-    vocab_size = len(vocab)
-    logging.info('vocab size: %d'  % vocab_size)    
-    percents = [0.0005, 0.001, 0.002, 0.005, 0.01, 0.02, 0.05]
-    percents = [int(p* vocab_size) for p in percents]
-    #adjust percents to match the vocabulary of mlp and lr
-    percents = [1, 10, 100, 1000]
 
-    word_nbrs = nearest_neighbours_closed(vocab, embs, k=int(len(vocab)), model=model)
-
-    #with open('./data/' + model + '_dialect_words.pkl', 'wb') as fout:
-    #    pickle.dump(word_nbrs, fout)
-    
-
-
-    calc_recall_closed2(vocab, word_nbrs=word_nbrs, freqwords=None, model=model)
 
 
 def dialectology(data_dir='./data/', dataset='na', model='mlp'):
@@ -916,23 +538,23 @@ def dialectology(data_dir='./data/', dataset='na', model='mlp'):
             clf, vectorizer = pickle.load(fout)
         logging.info('reading DARE vocab...')
         #vectorizer_mlp = load_data(dataset)[-1]
-        dare_vocab = get_dare_vocab_closed(data_dir, vectorizer)
+        dare_vocab = get_dare_vocab_vectorize(data_dir, vectorizer)
         
         X_dare = vectorizer.transform(dare_vocab)
         logging.info('getting DARE embeddings...')
         lr_embeddings = clf.predict_proba(X_dare)
-        dialect_eval_closed(vocab=dare_vocab, embs=lr_embeddings, model=model)
+        dialect_eval(vocab=dare_vocab, embs=lr_embeddings, model=model)
     elif model == 'word2vec':
         vectorizer = load_data(data_dir, dataset)[-1]
         logging.info('loading w2v embeddings...')
         logging.info('reading DARE vocab...')
-        dare_vocab = get_dare_vocab_closed(data_dir, vectorizer)
+        dare_vocab = get_dare_vocab_vectorize(data_dir, vectorizer)
         vocabset = set(dare_vocab)
         word2vec_model = load_word2vec('/home/arahimi/GoogleNews-vectors-negative300.bin.gz')
         w2v_vocab = [v for v in word2vec_model.vocab if v in vocabset]
         logging.info('vstacking word vectors into a single matrix for %d vocabs' %len(w2v_vocab))
         w2v_embs = np.vstack(tuple([np.asarray(word2vec_model[v]).reshape((1,300)) for v in w2v_vocab]))
-        dialect_eval_closed(vocab=w2v_vocab, embs=w2v_embs, model=model)
+        dialect_eval(vocab=w2v_vocab, embs=w2v_embs, model=model)
                 
 def tune(data_dir, dataset, num_iter=50):
     #randomized search
