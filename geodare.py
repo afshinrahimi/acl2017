@@ -965,7 +965,7 @@ def parse_args(argv):
     parser.add_argument('-dataset','--dataset', metavar='str', help='dataset name (cmu, na, world)', type=str, default='na')
     parser.add_argument('-model','--model', metavar='str', help='dialectology model (mlp, lr, word2vec)', type=str, default='mlp')
     parser.add_argument('-datadir', type=str, help='directory where input datasets (cmu.pkl, na.pkl, world.pkl) are located.')
-    parser.add_argument('-tune', action='store_true', help='if true, tune the hyperparameters.')
+    parser.add_argument('-tune', action='store_true', help='if true, tune the hyper-parameters.')
     args = parser.parse_args(argv)
     return args
 
