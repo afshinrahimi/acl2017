@@ -521,35 +521,35 @@ def dialect_eval(data_dir, vocab, embs, model):
 
 
 
-def dialectology(data_dir='./data/', dataset='na', model='mlp'):
-    if model == 'mlp':
+def dialectology():
+    pdb.set_trace()
+    if args.model == 'mlp':
         _coefs =  [1e-9, 1e-9]
         batch_size = 10000
         _hidden_layer_size = 256 * 8
         n_epochs = 20
-        geo_mlp(data_dir, dataset, n_epochs=n_epochs, batch_size=batch_size, regul_coefs=_coefs, hidden_layer_size=_hidden_layer_size, drop_out_coefs=[0.01, 0.01])
-    elif model == 'lr':
-        with open(path.join(data_dir, 'lr_model.pkl'), 'rb') as fout:
+        geo_mlp(args.data_dir, args.dataset, n_epochs=n_epochs, batch_size=batch_size, regul_coefs=_coefs, hidden_layer_size=_hidden_layer_size, drop_out_coefs=[0.01, 0.01])
+    elif args.model == 'lr':
+        with open(path.join(args.data_dir, 'lr_model.pkl'), 'rb') as fout:
             clf, vectorizer = pickle.load(fout)
         logging.info('reading DARE vocab...')
-        #vectorizer_mlp = load_data(dataset)[-1]
-        dare_vocab = get_dare_vocab_vectorize(data_dir, vectorizer)
+        dare_vocab = get_dare_vocab_vectorize(args.data_dir, vectorizer)
         
         X_dare = vectorizer.transform(dare_vocab)
         logging.info('getting DARE embeddings...')
         lr_embeddings = clf.predict_proba(X_dare)
-        dialect_eval(data_dir, vocab=dare_vocab, embs=lr_embeddings, model=model)
-    elif model == 'word2vec':
-        vectorizer = load_data(data_dir, dataset)[-1]
+        dialect_eval(args.data_dir, vocab=dare_vocab, embs=lr_embeddings, model=args.model)
+    elif args.model == 'word2vec':
+        vectorizer = load_data(args.data_dir, args.dataset)[-1]
         logging.info('loading w2v embeddings...')
         logging.info('reading DARE vocab...')
-        dare_vocab = get_dare_vocab_vectorize(data_dir, vectorizer)
+        dare_vocab = get_dare_vocab_vectorize(args.data_dir, vectorizer)
         vocabset = set(dare_vocab)
         word2vec_model = load_word2vec('/home/arahimi/GoogleNews-vectors-negative300.bin.gz')
         w2v_vocab = [v for v in word2vec_model.vocab if v in vocabset]
         logging.info('vstacking word vectors into a single matrix for %d vocabs' %len(w2v_vocab))
         w2v_embs = np.vstack(tuple([np.asarray(word2vec_model[v]).reshape((1,300)) for v in w2v_vocab]))
-        dialect_eval(data_dir, vocab=w2v_vocab, embs=w2v_embs, model=model)
+        dialect_eval(args.data_dir, vocab=w2v_vocab, embs=w2v_embs, model=args.model)
                 
 def tune(data_dir, dataset, num_iter=50):
     #randomized search
@@ -585,6 +585,7 @@ def parse_args(argv):
     parser.add_argument('-tune', action='store_true', help='if true, tune the hyper-parameters.')
     args = parser.parse_args(argv)
     return args
+
 
 if __name__ == '__main__':
     args = parse_args(sys.argv[1:])
