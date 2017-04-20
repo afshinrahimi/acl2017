@@ -20,7 +20,8 @@ DAREDS dataset
 --------------
 DAREDS is a dataset consisting of dialect words and their
 dialect region extracted from Dictionary of American Regional
-English (DARE) available online at http://www.daredictionary.com
+English (DARE) available online at http://www.daredictionary.com.
+It is available at the data directory.
 
 Geolocation datasets
 --------------------
