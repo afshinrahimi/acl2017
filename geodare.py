@@ -346,16 +346,11 @@ def calc_recall(vocab, word_nbrs, k, freqwords=set(), model='mlp'):
         else:
             logging.info('this dialect does not exist: ' + dialect)
     logging.info('recall at ' + str(k))
-    #the same number of all models
-    true_positive = 1472
     logging.info('#relevant %d, #hits %d' % (total_positive, total_true_positive))
     sum_support = sum([inf[1] for inf in info])
-    logging.info('micro recall :' + str(float(total_true_positive) * 100 / 1472))
+    logging.info('micro recall :' + str(float(total_true_positive) * 100 / total_positive))
 
 
-
-           
-   
 
 
 
@@ -543,7 +538,7 @@ def dialectology(data_dir='./data/', dataset='na', model='mlp'):
         X_dare = vectorizer.transform(dare_vocab)
         logging.info('getting DARE embeddings...')
         lr_embeddings = clf.predict_proba(X_dare)
-        dialect_eval(vocab=dare_vocab, embs=lr_embeddings, model=model)
+        dialect_eval(data_dir, vocab=dare_vocab, embs=lr_embeddings, model=model)
     elif model == 'word2vec':
         vectorizer = load_data(data_dir, dataset)[-1]
         logging.info('loading w2v embeddings...')
@@ -554,7 +549,7 @@ def dialectology(data_dir='./data/', dataset='na', model='mlp'):
         w2v_vocab = [v for v in word2vec_model.vocab if v in vocabset]
         logging.info('vstacking word vectors into a single matrix for %d vocabs' %len(w2v_vocab))
         w2v_embs = np.vstack(tuple([np.asarray(word2vec_model[v]).reshape((1,300)) for v in w2v_vocab]))
-        dialect_eval(vocab=w2v_vocab, embs=w2v_embs, model=model)
+        dialect_eval(data_dir, vocab=w2v_vocab, embs=w2v_embs, model=model)
                 
 def tune(data_dir, dataset, num_iter=50):
     #randomized search
