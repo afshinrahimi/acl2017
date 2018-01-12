@@ -27,7 +27,8 @@ Geolocation datasets
 --------------------
 We experiment with three Twitter geolocation datasets
 available at https://github.com/utcompling/textgrounder or
-alternatively https://www.amazon.com/clouddrive/share/kfl0TTPDkXuFqTZ17WJSnhXT0q6fGkTlOTOLZ9VVPNu.
+alternatively https://www.amazon.com/clouddrive/share/kfl0TTPDkXuFqTZ17WJSnhXT0q6fGkTlOTOLZ9VVPNu
+or in preprocessed pickle from from https://www.dropbox.com/sh/vofn0awjcjxhwbc/AABHekl2pmFk2Q3qdVO60JTKa?dl=0.
 
 
 Usage
