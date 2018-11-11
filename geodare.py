@@ -522,7 +522,6 @@ def dialect_eval(data_dir, vocab, embs, model):
 
 
 def dialectology():
-    pdb.set_trace()
     if args.model == 'mlp':
         _coefs =  [1e-9, 1e-9]
         batch_size = 10000
